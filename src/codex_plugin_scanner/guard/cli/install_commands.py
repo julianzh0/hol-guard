@@ -162,6 +162,9 @@ def list_harness_setup_items(context: HarnessContext, store: GuardStore | None =
         else:
             status = "not_found"
         observed_copy = _HARNESS_OBSERVED_COPY[status]
+        warnings = []
+        if status == "needs_repair" and not detection.get("managed_active", False):
+            warnings.append("Guard-managed configuration remains, but this app is not connected to Guard.")
         items.append(
             {
                 "harness": adapter.harness,
@@ -171,6 +174,7 @@ def list_harness_setup_items(context: HarnessContext, store: GuardStore | None =
                 "command_available": detection["command_available"],
                 "config_paths": detection["config_paths"],
                 "artifact_count": 0,
+                "warnings": warnings,
                 **adapter.setup_contract().to_dict(),
             }
         )
@@ -321,6 +325,7 @@ def _safe_setup_detection(
                 and diagnostics.get("setup_status") == "active"
                 and verify_managed_install_proof(managed.get("manifest"), context) is True
             ),
+            "managed_active": bool(managed and managed.get("active")),
             "needs_repair": False,
             "command_available": diagnostics.get("command_available", False),
             "config_paths": diagnostics.get("config_paths", []),
@@ -329,6 +334,7 @@ def _safe_setup_detection(
     checked_status = _fleet_checked_setup_status(adapter.harness, managed, store) if use_fleet_check else None
     return {
         "installed": checked_status == "active" or (checked_status is None and managed_active),
+        "managed_active": managed_active,
         "needs_repair": checked_status == "broken" or (managed_active and checked_status in {"partial", "not_found"}),
         "command_available": adapter.resolved_executable(context) is not None,
         "config_paths": _existing_contract_config_paths(adapter.harness, context),
